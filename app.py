@@ -3,12 +3,12 @@ import pandas as pd
 from engine import InvestorDataPipeline, InvestorMatchingGraph
 
 st.set_page_config(page_title="Investor Matching Engine", layout="wide")
-
 st.title("🚀 Venture Investor Matching Engine")
 
 @st.cache_resource
 def load_engine():
-    data = InvestorDataPipeline("VC Backed IPO Data.csv")
+    # CSV filename with [Complete]
+    data = InvestorDataPipeline("VC Backed IPO Data [Complete].csv")
     data.generate_embeddings()
     graph = InvestorMatchingGraph(data)
     return graph
