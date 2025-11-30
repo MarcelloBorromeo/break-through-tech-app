@@ -2,54 +2,87 @@ import streamlit as st
 import pandas as pd
 from engine import InvestorDataPipeline, InvestorMatchingGraph
 
+
 # -----------------------------------------------------------
-# Custom IEC Theme CSS
+# IEC ULTRA-PREMIUM THEME — GLOBAL CSS
 # -----------------------------------------------------------
 st.markdown("""
 <style>
-    /* Centered Title */
+
+    /* Global Background */
+    body, .stApp {
+        background: linear-gradient(180deg, #E8F1FF 0%, #FFFFFF 60%) !important;
+    }
+
+    /* Container Width + Centering */
+    .block-container {
+        max-width: 1000px !important;
+        margin-top: -20px;
+    }
+
+    /* Title */
     .main-title {
         text-align: center;
-        font-size: 42px;
+        font-size: 46px !important;
+        font-weight: 800 !important;
+        color: #0E3A75;
+        letter-spacing: .5px;
+        margin-bottom: 5px;
+    }
+
+    /* Subtitle */
+    .subheader {
+        text-align: center;
+        font-size: 20px;
+        color: #167DFF;
+        margin-bottom: 30px;
+    }
+
+    /* Glass Card */
+    .card {
+        background: rgba(255, 255, 255, 0.65);
+        backdrop-filter: blur(14px);
+        border-radius: 14px;
+        padding: 25px;
+        margin-top: 18px;
+        border: 1px solid #D9E8FF;
+        box-shadow: 0 6px 22px rgba(0,0,0,0.06);
+    }
+
+    /* Investor Name */
+    .investor-name {
+        font-size: 22px;
         font-weight: 700;
         color: #167DFF;
-        margin-top: -20px;
-        letter-spacing: 1px;
+        margin-bottom: 10px;
     }
 
-    /* Section Headers */
-    .section-header {
-        font-size: 26px;
-        font-weight: 600;
+    /* Explanation Text */
+    .explanation {
         color: #0E3A75;
-        margin-top: 25px;
-    }
-
-    /* Card-style Containers */
-    .result-card {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #E6F0FF;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
-    }
-
-    /* Buttons */
-    .stButton>button {
-        background-color: #167DFF;
-        color: white;
-        border-radius: 8px;
-        padding: 10px 20px;
         font-size: 16px;
-        border: none;
-    }
-    .stButton>button:hover {
-        background-color: #0E3A75;
-        color: #ffffff;
+        line-height: 1.55;
+        margin-bottom: 12px;
     }
 
-    /* Table Styling */
+    /* Web Summary */
+    .web-summary {
+        font-size: 14px;
+        color: #167DFF;
+        font-weight: 600;
+        margin-top: -6px;
+    }
+
+    /* Section Header */
+    .section-header {
+        font-size: 28px !important;
+        font-weight: 700 !important;
+        color: #0E3A75 !important;
+        margin-top: 40px;
+        margin-bottom: 12px;
+    }
+
+    /* Table Formatting */
     table {
         border-collapse: collapse;
         width: 100%;
@@ -58,37 +91,51 @@ st.markdown("""
     th {
         background-color: #167DFF !important;
         color: white !important;
-        text-align: left !important;
+        text-align: center !important;
         font-size: 16px !important;
         padding: 8px !important;
     }
     td {
-        background-color: #F8FAFF;
-        padding: 8px !important;
+        background-color: #F4F8FF !important;
+        padding: 10px !important;
+        text-align: center !important;
         font-size: 15px !important;
     }
 
-    /* Text */
-    .explanation-text {
-        font-size: 16px;
+    /* Progress text */
+    .progress-text {
+        text-align: center;
         color: #0E3A75;
-        line-height: 1.45;
-        margin-top: 8px;
+        font-size: 16px;
+        margin-top: 5px;
     }
 
-    .web-summary {
-        font-size: 14px;
-        color: #167DFF;
-        margin-top: -4px;
-        opacity: 0.9;
+    /* Buttons */
+    .stButton>button {
+        background: #167DFF;
+        color: white;
+        border-radius: 8px;
+        height: 50px;
+        width: 100%;
+        border: none;
+        font-size: 17px;
+        font-weight: 600;
+        transition: 0.2s;
     }
+    .stButton>button:hover {
+        background: #0E3A75;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
+
 # -----------------------------------------------------------
-# Title
+# Hero Title
 # -----------------------------------------------------------
 st.markdown("<h1 class='main-title'>Venture Investor Matching Engine</h1>", unsafe_allow_html=True)
+st.markdown("<div class='subheader'>IEC-powered precision investor recommendations</div>", unsafe_allow_html=True)
+
 
 # -----------------------------------------------------------
 # Load Engine
@@ -102,6 +149,7 @@ def load_engine():
 
 engine = load_engine()
 
+
 # -----------------------------------------------------------
 # Sidebar Inputs
 # -----------------------------------------------------------
@@ -109,18 +157,18 @@ with st.sidebar:
     st.header("Startup Profile")
     industry = st.text_input("Industry", "Software")
     deal = st.number_input("Deal Size ($M)", 50.0)
-    growth = st.number_input("Revenue Growth YoY", 0.35)
+    growth = st.number_input("Growth YoY", 0.35)
     desc = st.text_area("Description", "AI workflow automation platform.")
 
 
 # -----------------------------------------------------------
-# Matching Button
+# Matching Logic
 # -----------------------------------------------------------
 if st.button("Run Matching"):
-    status = st.empty()
+    step_display = st.empty()
 
     def update_step(text):
-        status.markdown(f"**{text}**")
+        step_display.markdown(f"<div class='progress-text'>{text}</div>", unsafe_allow_html=True)
 
     with st.spinner("Running investor matching pipeline…"):
         results = engine.run(
@@ -133,14 +181,15 @@ if st.button("Run Matching"):
             progress_callback=update_step
         )
 
-    status.markdown("**<span style='color:green;'>✔ Done</span>**", unsafe_allow_html=True)
+    step_display.markdown("<div class='progress-text' style='color:green;'>✔ Done</div>", unsafe_allow_html=True)
 
-    df = pd.DataFrame(results)
 
     # -----------------------------------------------------------
-    # Results (Top 3 Investors)
+    # Top 3 MATCHES TABLE
     # -----------------------------------------------------------
     st.markdown("<div class='section-header'>Top 3 Matches</div>", unsafe_allow_html=True)
+
+    df = pd.DataFrame(results)
 
     st.dataframe(
         df[["investor", "final"]].rename(columns={
@@ -150,12 +199,17 @@ if st.button("Run Matching"):
         use_container_width=True
     )
 
+
     # -----------------------------------------------------------
-    # Explanations
+    # Reasoning Cards
     # -----------------------------------------------------------
     st.markdown("<div class='section-header'>Reasoning</div>", unsafe_allow_html=True)
 
     for r in results:
-        st.markdown(f"<div class='result-card'><h4 style='color:#167DFF;'>{r['investor']}</h4>", unsafe_allow_html=True)
-        st.markdown(f"<p class='explanation-text'>{r['explanation']}</p>", unsafe_allow_html=True)
-        st.markdown(f"<p class='web-summary'><strong>Web Summary:</strong> {r['web']}</p></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class='card'>
+            <div class='investor-name'>{r['investor']}</div>
+            <div class='explanation'>{r['explanation']}</div>
+            <div class='web-summary'><strong>Web Summary:</strong> {r['web']}</div>
+        </div>
+        """, unsafe_allow_html=True)
