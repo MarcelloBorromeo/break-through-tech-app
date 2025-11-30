@@ -7,11 +7,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import streamlit as st
 from anthropic import Anthropic
 
-# Load API key from Streamlit secrets
-client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+# IMPORTANT: use Kaggle model proxy, not Anthropic native API
+client = Anthropic(
+    api_key=st.secrets["ANTHROPIC_API_KEY"],
+    base_url="https://mp.kaggle.net/v1"
+)
 
 # ===================================================================
-# STEP 1: DATA PIPELINE & EMBEDDINGS
+# DATA PIPELINE
 # ===================================================================
 
 class InvestorDataPipeline:
@@ -29,7 +32,6 @@ class InvestorDataPipeline:
             .str.replace(r"[\r\n]+", " ", regex=True)
             .str.strip()
         )
-
         self.df["Business_Overview"] = self.df["Business_Overview"].fillna("")
         self.df["Competitive Analysis "] = self.df["Competitive Analysis "].fillna("")
 
@@ -39,10 +41,10 @@ class InvestorDataPipeline:
         industries = investor_deals["Industry"].unique()
 
         context = f"Investor: {investor_name}\n"
-        context += f"Portfolio Companies: {', '.join(companies[:10])}\n"
+        context += f"Portfolio: {', '.join(companies[:10])}\n"
         context += f"Industries: {', '.join(industries)}\n"
-        context += f"Number of deals: {len(investor_deals)}\n\n"
-        context += "Sample Company Profiles:\n"
+        context += f"Deals: {len(investor_deals)}\n\n"
+        context += "Sample Profiles:\n"
 
         for _, row in investor_deals.head(3).iterrows():
             context += f"- {row['Portfolio_Company']}: {row['Business_Overview'][:200]}...\n"
@@ -53,10 +55,8 @@ class InvestorDataPipeline:
         investor_deals = self.df[self.df["Investor_Name"] == investor_name]
         parts = []
 
-        companies = investor_deals["Portfolio_Company"].unique()
-        industries = investor_deals["Industry"].unique()
-        parts.append(f"Portfolio: {', '.join(companies)}")
-        parts.append(f"Industries: {', '.join(industries)}")
+        parts.append(f"Portfolio: {', '.join(investor_deals['Portfolio_Company'].unique())}")
+        parts.append(f"Industries: {', '.join(investor_deals['Industry'].unique())}")
 
         for t in investor_deals["Business_Overview"].dropna().unique():
             parts.append(t)
@@ -65,31 +65,28 @@ class InvestorDataPipeline:
 
         deal_sizes = investor_deals["Deal_Size_M"].dropna()
         if len(deal_sizes) > 0:
-            parts.append(f"Typical deal size: ${deal_sizes.mean():.1f}M")
+            parts.append(f"Deal size: ${deal_sizes.mean():.1f}M")
 
         return " ".join(" ".join(parts).split())
 
     def generate_embeddings(self):
         unique_investors = self.df["Investor_Name"].unique()
-
         investor_fingerprints = {}
-        for investor in unique_investors:
-            context = self.create_investor_context(investor)
-            fingerprint = self.create_investor_fingerprint(investor)
-            investor_fingerprints[investor] = fingerprint
 
-            self.investor_embeddings[investor] = {
-                "context": context,
-                "fingerprint": fingerprint,
-            }
+        for investor in unique_investors:
+            fp = self.create_investor_fingerprint(investor)
+            ctx = self.create_investor_context(investor)
+
+            investor_fingerprints[investor] = fp
+            self.investor_embeddings[investor] = {"context": ctx, "fingerprint": fp}
 
         self.vectorizer.fit(investor_fingerprints.values())
 
-        for inv in unique_investors:
-            vec = self.vectorizer.transform([investor_fingerprints[inv]]).toarray()[0]
-            self.investor_fingerprint_vectors[inv] = vec
+        for investor in unique_investors:
+            vec = self.vectorizer.transform([investor_fingerprints[investor]]).toarray()[0]
+            self.investor_fingerprint_vectors[investor] = vec
 
-    def calculate_embedding_similarity(self, startup_vector: np.ndarray, investor_name: str) -> float:
+    def calculate_embedding_similarity(self, startup_vector, investor_name):
         investor_vector = self.investor_fingerprint_vectors[investor_name]
 
         dot = np.dot(startup_vector, investor_vector)
@@ -98,12 +95,11 @@ class InvestorDataPipeline:
         if norm_s == 0 or norm_i == 0:
             return 0.0
 
-        cosine_sim = dot / (norm_s * norm_i)
-        return round(cosine_sim * 100, 2)
+        return round((dot / (norm_s * norm_i)) * 100, 2)
 
 
 # ===================================================================
-# STEP 2: LANGGRAPH-STYLE LLM REASONING
+# LLM PIPELINE
 # ===================================================================
 
 class GraphState(TypedDict):
@@ -118,110 +114,95 @@ class InvestorMatchingGraph:
         self.data = data_pipeline
         self.client = client
 
-    # ---------------------- WEB CONTEXT NODE -----------------------
-    def fetch_investor_web_context(self, investor_name: str) -> str:
+    def fetch_investor_web_context(self, investor_name):
         prompt = f"""
-Perform a brief lookup for this investor and firm:
-
-Investor: {investor_name}
-
-Return 3–6 sentences about:
-- Focus / thesis
-- Stage and check size
-- Geography
-- Notable investments
-- Any relevant public info
-If unsure, state that.
+Find public info about investor {investor_name}.
+Summarize: focus, stage, check size, geography, notable deals.
 """
 
         try:
             resp = self.client.messages.create(
-                model="claude-3.5-sonnet",
-                max_tokens=300,
+                model="claude-3-sonnet",
+                max_tokens=200,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return resp.content[0].text.strip()
+            return resp.content[0].text
         except Exception as e:
             return f"(Web context unavailable: {e})"
 
-    # ---------------------- RETRIEVAL NODE -------------------------
-    def retrieve_candidates(self, state: GraphState) -> GraphState:
+    def retrieve_candidates(self, state):
         startup_text = f"{state['startup_profile']['industry']} {state['startup_profile']['description']}"
         startup_vector = self.data.vectorizer.transform([startup_text]).toarray()[0]
 
         scores = []
         for investor in state["all_investors"]:
-            s = self.data.calculate_embedding_similarity(startup_vector, investor)
-            scores.append({"investor_name": investor, "embedding_likelihood": s})
+            sim = self.data.calculate_embedding_similarity(startup_vector, investor)
+            scores.append({"investor_name": investor, "embedding_likelihood": sim})
 
         scores.sort(key=lambda x: x["embedding_likelihood"], reverse=True)
         state["candidate_investors"] = scores[:3]
         return state
 
-    # ---------------------- REASONING NODE -------------------------
-    def reason_about_fit(self, state: GraphState) -> GraphState:
+    def reason_about_fit(self, state):
         startup = state["startup_profile"]
 
         for cand in state["candidate_investors"]:
             name = cand["investor_name"]
-            inv_context = self.data.investor_embeddings[name]["context"]
-            web_context = self.fetch_investor_web_context(name)
+            context = self.data.investor_embeddings[name]["context"]
+            web = self.fetch_investor_web_context(name)
 
             prompt = f"""
-Evaluate investor–startup fit.
+Evaluate fit between startup and investor.
 
 STARTUP:
 Industry: {startup['industry']}
 Deal Size: {startup['deal_size_m']}
-YOY Growth: {startup['revenue_growth_yoy']}
-Description: {startup['description']}
+Growth: {startup['revenue_growth_yoy']}
+Desc: {startup['description']}
 
-INVESTOR (Dataset):
-{inv_context}
+INVESTOR DATA:
+{context}
 
-INVESTOR (Web):
-{web_context}
+WEB:
+{web}
 
-Embedding Score: {cand['embedding_likelihood']}
+Embedding: {cand['embedding_likelihood']}
 
 Return JSON:
 {{
   "adjustment": -20 to 20,
-  "explanation": "<2–3 sentence explanation>"
+  "explanation": "text"
 }}
 """
 
             try:
                 resp = self.client.messages.create(
-                    model="claude-3.5-sonnet",
-                    max_tokens=500,
+                    model="claude-3-sonnet",
+                    max_tokens=400,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 js = json.loads(resp.content[0].text)
                 cand["llm_adjustment"] = js.get("adjustment", 0)
                 cand["explanation"] = js.get("explanation", "")
-                cand["web_context"] = web_context
-
+                cand["web_context"] = web
             except Exception as e:
                 cand["llm_adjustment"] = 0
                 cand["explanation"] = f"LLM error: {e}"
-                cand["web_context"] = web_context
+                cand["web_context"] = web
 
         return state
 
-    # ---------------------- RANKING NODE ---------------------------
-    def rank_investors(self, state: GraphState) -> GraphState:
+    def rank_investors(self, state):
         for cand in state["candidate_investors"]:
-            final_score = cand["embedding_likelihood"] + cand["llm_adjustment"]
-            cand["final_score"] = max(0, min(100, round(final_score, 2)))
+            score = cand["embedding_likelihood"] + cand["llm_adjustment"]
+            cand["final_score"] = max(0, min(100, score))
 
         state["ranked_results"] = sorted(
             state["candidate_investors"], key=lambda x: x["final_score"], reverse=True
         )
         return state
 
-    # ---------------------- PIPELINE -------------------------------
-    def run_pipeline(self, startup_profile: Dict):
+    def run_pipeline(self, startup_profile):
         state = GraphState(
             startup_profile=startup_profile,
             all_investors=list(self.data.investor_embeddings.keys()),
