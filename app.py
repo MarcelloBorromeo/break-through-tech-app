@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
+import time
 from engine import InvestorDataPipeline, InvestorMatchingGraph
 
 
 # -----------------------------------------------------------
-# IEC ULTRA-PREMIUM THEME — GLOBAL CSS
+# IEC PREMIUM UI THEME — UPDATED VERSION
 # -----------------------------------------------------------
 st.markdown("""
 <style>
@@ -14,10 +15,9 @@ st.markdown("""
         background: linear-gradient(180deg, #E8F1FF 0%, #FFFFFF 60%) !important;
     }
 
-    /* Container Width + Centering */
+    /* Container Width */
     .block-container {
         max-width: 1000px !important;
-        margin-top: -20px;
     }
 
     /* Title */
@@ -25,9 +25,10 @@ st.markdown("""
         text-align: center;
         font-size: 46px !important;
         font-weight: 800 !important;
-        color: #0E3A75;
-        letter-spacing: .5px;
+        color: #000000 !important;
+        letter-spacing: 0.2px;
         margin-bottom: 5px;
+        opacity: 0.90;
     }
 
     /* Subtitle */
@@ -35,18 +36,27 @@ st.markdown("""
         text-align: center;
         font-size: 20px;
         color: #167DFF;
-        margin-bottom: 30px;
+        margin-bottom: 20px;
     }
 
-    /* Glass Card */
+    /* Section Header */
+    .section-header {
+        font-size: 26px !important;
+        font-weight: 700 !important;
+        color: #0E3A75 !important;
+        margin-top: 10px;
+        margin-bottom: 8px;
+    }
+
+    /* Glass Card Style */
     .card {
-        background: rgba(255, 255, 255, 0.65);
-        backdrop-filter: blur(14px);
-        border-radius: 14px;
-        padding: 25px;
-        margin-top: 18px;
-        border: 1px solid #D9E8FF;
-        box-shadow: 0 6px 22px rgba(0,0,0,0.06);
+        background: rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(8px);
+        border-radius: 12px;
+        padding: 22px;
+        margin-top: 10px;
+        border: 1.5px solid #AFCBFF;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.05);
     }
 
     /* Investor Name */
@@ -57,8 +67,9 @@ st.markdown("""
         margin-bottom: 10px;
     }
 
-    /* Explanation Text */
+    /* Explanation / Justified Text */
     .explanation {
+        text-align: justify;
         color: #0E3A75;
         font-size: 16px;
         line-height: 1.55;
@@ -70,47 +81,35 @@ st.markdown("""
         font-size: 14px;
         color: #167DFF;
         font-weight: 600;
-        margin-top: -6px;
+        margin-top: -4px;
     }
 
-    /* Section Header */
-    .section-header {
-        font-size: 28px !important;
-        font-weight: 700 !important;
-        color: #0E3A75 !important;
-        margin-top: 40px;
-        margin-bottom: 12px;
-    }
-
-    /* Table Formatting */
+    /* Table Styling */
     table {
-        border-collapse: collapse;
-        width: 100%;
-        background: white;
+        border-collapse: collapse !important;
+        width: 100% !important;
+        border: 1.5px solid #AFCBFF !important;
     }
     th {
         background-color: #167DFF !important;
         color: white !important;
         text-align: center !important;
-        font-size: 16px !important;
-        padding: 8px !important;
+        font-size: 17px !important;
+        padding: 10px !important;
     }
     td {
-        background-color: #F4F8FF !important;
+        background-color: #FFFFFF !important;
+        color: #0E3A75 !important;
         padding: 10px !important;
+        font-size: 16px !important;
+    }
+
+    /* Center Match Score Column */
+    td:nth-child(2) {
         text-align: center !important;
-        font-size: 15px !important;
     }
 
-    /* Progress text */
-    .progress-text {
-        text-align: center;
-        color: #0E3A75;
-        font-size: 16px;
-        margin-top: 5px;
-    }
-
-    /* Buttons */
+    /* Button Styling */
     .stButton>button {
         background: #167DFF;
         color: white;
@@ -118,7 +117,7 @@ st.markdown("""
         height: 50px;
         width: 100%;
         border: none;
-        font-size: 17px;
+        font-size: 18px;
         font-weight: 600;
         transition: 0.2s;
     }
@@ -126,12 +125,21 @@ st.markdown("""
         background: #0E3A75;
     }
 
+    /* Progress text */
+    .progress-text {
+        text-align: left;
+        color: #0E3A75;
+        font-size: 15px;
+        margin-top: 5px;
+        margin-bottom: 0px;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
 
 # -----------------------------------------------------------
-# Hero Title
+# Page Title
 # -----------------------------------------------------------
 st.markdown("<h1 class='main-title'>Venture Investor Matching Engine</h1>", unsafe_allow_html=True)
 st.markdown("<div class='subheader'>IEC-powered precision investor recommendations</div>", unsafe_allow_html=True)
@@ -165,6 +173,7 @@ with st.sidebar:
 # Matching Logic
 # -----------------------------------------------------------
 if st.button("Run Matching"):
+
     step_display = st.empty()
 
     def update_step(text):
@@ -181,8 +190,13 @@ if st.button("Run Matching"):
             progress_callback=update_step
         )
 
-    step_display.markdown("<div class='progress-text' style='color:green;'>✔ Done</div>", unsafe_allow_html=True)
+    # Left-justified Done message
+    done_msg = st.empty()
+    done_msg.markdown("<div class='progress-text' style='color:green;'>✔ Done</div>", unsafe_allow_html=True)
 
+    # Fades away
+    time.sleep(2)
+    done_msg.empty()
 
     # -----------------------------------------------------------
     # Top 3 MATCHES TABLE
@@ -201,7 +215,7 @@ if st.button("Run Matching"):
 
 
     # -----------------------------------------------------------
-    # Reasoning Cards
+    # Reasoning Cards (Justified + Border)
     # -----------------------------------------------------------
     st.markdown("<div class='section-header'>Reasoning</div>", unsafe_allow_html=True)
 
