@@ -8,30 +8,32 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 # ================================================================
-# KAGGLE PROXY CHAT FUNCTION
+# OPENROUTER CHAT COMPLETIONS FUNCTION
 # ================================================================
-def kaggle_chat(model, messages, api_key, max_tokens=400):
+def or_chat(model, messages, api_key, max_tokens=400):
     """
-    Calls the Kaggle Model Proxy (mp.kaggle.net) using OpenAI-style API.
-    Your sk-ant-api03 key works for this ONLY.
+    Calls OpenRouter's API using OpenAI-style chat/completions.
+    Supports Claude 3.5 Sonnet via anthropic/claude-3.5-sonnet.
     """
-    url = "https://mp.kaggle.net/v1/chat/completions"
+    url = "https://openrouter.ai/api/v1/chat/completions"
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "HTTP-Referer": "http://localhost",
+        "X-Title": "Investor Matcher App",
+        "Content-Type": "application/json",
     }
 
     payload = {
-        "model": model,  # Use claude-3.5-sonnet or claude-3-sonnet
+        "model": model,
         "messages": messages,
-        "max_tokens": max_tokens
+        "max_tokens": max_tokens,
     }
 
     resp = requests.post(url, headers=headers, json=payload)
 
     if resp.status_code != 200:
-        raise Exception(f"Kaggle API Error {resp.status_code}: {resp.text}")
+        raise Exception(f"OpenRouter Error {resp.status_code}: {resp.text}")
 
     data = resp.json()
     return data["choices"][0]["message"]["content"]
@@ -121,7 +123,7 @@ class InvestorDataPipeline:
 
 
 # ================================================================
-# MATCHING PIPELINE (LLM + EMBEDDINGS)
+# MATCHING PIPELINE
 # ================================================================
 class GraphState(TypedDict):
     startup_profile: Dict
@@ -142,10 +144,10 @@ Summarize their focus, thesis, stage, check size, and notable deals.
 """
 
         try:
-            result = kaggle_chat(
-                model="claude-3.5-sonnet",  # supported by Kaggle proxy
+            result = or_chat(
+                model="anthropic/claude-3.5-sonnet",
                 messages=[{"role": "user", "content": prompt}],
-                api_key=st.secrets["ANTHROPIC_API_KEY"],
+                api_key=st.secrets["OPENROUTER_API_KEY"],
                 max_tokens=200
             )
             return result
@@ -201,11 +203,11 @@ Return ONLY JSON:
 """
 
             try:
-                response = kaggle_chat(
-                    model="claude-3.5-sonnet",
+                response = or_chat(
+                    model="anthropic/claude-3.5-sonnet",
                     messages=[{"role": "user", "content": prompt}],
-                    api_key=st.secrets["ANTHROPIC_API_KEY"],
-                    max_tokens=500
+                    api_key=st.secrets["OPENROUTER_API_KEY"],
+                    max_tokens=400
                 )
 
                 js = json.loads(response)
