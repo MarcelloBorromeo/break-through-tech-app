@@ -30,33 +30,42 @@ def or_chat(model: str, messages: List[Dict], api_key: str, max_tokens: int = 30
 
 
 # ================================================================
-# DATA PIPELINE (TF-IDF Embeddings)
+# DATA PIPELINE
 # ================================================================
 class InvestorDataPipeline:
     def __init__(self, csv_path: str):
         self.df = pd.read_csv(csv_path)
         self.vectorizer = TfidfVectorizer(max_features=600, ngram_range=(1, 2))
-        self.investor_embeddings = {}
         self.investor_vectors = {}
+        self.investor_contexts = {}
         self._clean_data()
 
     def _clean_data(self):
         self.df["Investor_Name"] = (
-            self.df["Investor_Name"].astype(str).str.replace(r"[\r\n]+", " ", regex=True).str.strip()
+            self.df["Investor_Name"].astype(str)
+            .str.replace(r"[\r\n]+", " ", regex=True)
+            .str.strip()
         )
         self.df["Business_Overview"].fillna("", inplace=True)
         if "Competitive Analysis " in self.df.columns:
             self.df["Competitive Analysis "].fillna("", inplace=True)
 
-    def _fingerprint(self, inv: str) -> str:
-        deals = self.df[self.df["Investor_Name"] == inv]
-        text = " ".join([
+    def _fingerprint(self, investor: str) -> str:
+        deals = self.df[self.df["Investor_Name"] == investor]
+        return " ".join([
             " ".join(deals["Portfolio_Company"].astype(str).unique()),
             " ".join(deals["Industry"].astype(str).unique()),
             " ".join(deals["Business_Overview"].astype(str).unique()),
             " ".join(deals.get("Competitive Analysis ", "").astype(str).unique()),
         ])
-        return text
+
+    def _context(self, investor: str) -> str:
+        deals = self.df[self.df["Investor_Name"] == investor]
+        ctx = f"Investor: {investor}\n"
+        ctx += f"Industries: {', '.join(deals['Industry'].unique())}\n"
+        ctx += f"Portfolio: {', '.join(deals['Portfolio_Company'].unique()[:10])}\n"
+        ctx += f"Deals: {len(deals)}"
+        return ctx
 
     def generate_embeddings(self):
         investors = self.df["Investor_Name"].unique()
@@ -66,21 +75,21 @@ class InvestorDataPipeline:
         for inv in investors:
             vec = self.vectorizer.transform([fps[inv]]).toarray()[0]
             self.investor_vectors[inv] = vec
-            self.investor_embeddings[inv] = fps[inv]
+            self.investor_contexts[inv] = self._context(inv)
 
-    def similarity(self, startup_vec, inv):
-        v2 = self.investor_vectors[inv]
+    def similarity(self, startup_vec, investor):
+        v2 = self.investor_vectors[investor]
         dot = np.dot(startup_vec, v2)
         n1, n2 = np.linalg.norm(startup_vec), np.linalg.norm(v2)
         return 0 if n1 == 0 or n2 == 0 else round((dot / (n1 * n2)) * 100, 2)
 
 
 # ================================================================
-# LANGGRAPH-LIKE MATCHING ENGINE
+# MATCHING ENGINE
 # ================================================================
 class GraphState(TypedDict):
-    startup_profile: Dict
-    investor_names: List[str]
+    startup: Dict
+    investors: List[str]
     candidates: List[Dict]
     ranked: List[Dict]
 
@@ -93,62 +102,75 @@ class InvestorMatchingGraph:
 
     # ------------------------------------------------------------
     def retrieve(self, state: GraphState):
-        txt = f"{state['startup_profile']['industry']} {state['startup_profile']['description']}"
+        txt = f"{state['startup']['industry']} {state['startup']['description']}"
         vec = self.data.vectorizer.transform([txt]).toarray()[0]
 
         scores = []
-        for inv in state["investor_names"]:
+        for inv in state["investors"]:
             scores.append({
                 "investor": inv,
                 "embedding": self.data.similarity(vec, inv)
             })
 
         scores.sort(key=lambda x: x["embedding"], reverse=True)
-        state["candidates"] = scores[:5]
+        state["candidates"] = scores[:3]     # <<— TOP 3 ONLY
         return state
 
     # ------------------------------------------------------------
-    def fetch_web(self, name: str) -> str:
-        sys = "Return 2 short bullet points summarizing this investor's focus and stage. Keep each under 10 words."
-        usr = f"Investor name: {name}"
+    def fetch_web(self, investor):
+        sys_prompt = (
+            "Return 2 short bullet points (<=10 words each)"
+            " describing this investor's focus, stage, or check size."
+        )
         try:
-            out = or_chat(self.model,
-                          [{"role": "system", "content": sys},
-                           {"role": "user", "content": usr}],
-                          self.key, max_tokens=120)
-            return out.strip()
+            return or_chat(
+                self.model,
+                [
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": f"Investor: {investor}"}
+                ],
+                self.key,
+                max_tokens=120
+            )
         except Exception as e:
             return f"(web unavailable: {e})"
 
     # ------------------------------------------------------------
     def reason(self, state: GraphState):
-        startup = state["startup_profile"]
+        s = state["startup"]
 
         for c in state["candidates"]:
             inv = c["investor"]
             web = self.fetch_web(inv)
+            dataset_context = self.data.investor_contexts[inv]
 
-            sys = (
-                "You are a concise VC analyst. Write 1 paragraph (max 4 sentences) "
-                "explaining the fit between this startup and investor. "
-                "Be specific, factual, and rely on the dataset, web signals, and embedding score."
+            system_msg = (
+                "You are a concise VC analyst. Write one paragraph (max 4 sentences) "
+                "explaining the investor–startup fit using evidence from the embedding score, "
+                "dataset context, and web summary. Be specific, insightful, and avoid generic language."
             )
 
-            usr = (
-                f"STARTUP:\nIndustry: {startup['industry']}\nDeal Size: {startup['deal_size_m']}\n"
-                f"Growth: {startup['revenue_growth_yoy']}\nDescription: {startup['description']}\n\n"
+            user_msg = (
+                f"STARTUP:\nIndustry: {s['industry']}\nDeal Size: ${s['deal_size_m']}M\n"
+                f"Growth: {s['revenue_growth_yoy']}\nDescription: {s['description']}\n\n"
                 f"INVESTOR EMBEDDING SCORE: {c['embedding']}\n"
-                f"WEB SUMMARY:\n{web}"
+                f"WEB SUMMARY:\n{web}\n\n"
+                f"DATASET CONTEXT:\n{dataset_context}"
             )
 
             try:
-                explanation = or_chat(self.model,
-                                      [{"role": "system", "content": sys},
-                                       {"role": "user", "content": usr}],
-                                      self.key, max_tokens=180)
+                explanation = or_chat(
+                    self.model,
+                    [
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": user_msg}
+                    ],
+                    self.key,
+                    max_tokens=220
+                )
                 c["explanation"] = explanation.strip()
                 c["web"] = web
-                c["final"] = max(0, min(100, c["embedding"]))
+                c["final"] = c["embedding"]  # no adjustment
             except Exception as e:
                 c["explanation"] = f"(LLM error: {e})"
                 c["web"] = web
@@ -162,10 +184,10 @@ class InvestorMatchingGraph:
         return state
 
     # ------------------------------------------------------------
-    def run(self, startup: Dict, progress_callback):
+    def run(self, startup, progress_callback):
         state = GraphState(
-            startup_profile=startup,
-            investor_names=list(self.data.investor_vectors.keys()),
+            startup=startup,
+            investors=list(self.data.investor_vectors.keys()),
             candidates=[],
             ranked=[]
         )
@@ -173,11 +195,11 @@ class InvestorMatchingGraph:
         progress_callback("Retrieving candidates…")
         state = self.retrieve(state)
 
-        progress_callback("Fetching web summaries…")
+        progress_callback("Analyzing fit…")
         state = self.reason(state)
 
-        progress_callback("Ranking results…")
+        progress_callback("Ranking…")
         state = self.rank(state)
 
-        progress_callback("Done.")
+        progress_callback("✅ Done")
         return state["ranked"]
