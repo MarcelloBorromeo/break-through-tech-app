@@ -66,11 +66,12 @@ class InvestorDataPipeline:
 
     def generate_embeddings(self):
         investors = self.df["Investor_Name"].unique()
-        fps = {inv: self._fingerprint(inv) for inv in investors}
-        self.vectorizer.fit(fps.values())
+        fingerprints = {inv: self._fingerprint(inv) for inv in investors}
+
+        self.vectorizer.fit(fingerprints.values())
 
         for inv in investors:
-            vec = self.vectorizer.transform([fps[inv]]).toarray()[0]
+            vec = self.vectorizer.transform([fingerprints[inv]]).toarray()[0]
             self.investor_vectors[inv] = vec
             self.investor_contexts[inv] = self._context(inv)
 
@@ -116,9 +117,9 @@ class InvestorMatchingGraph:
     # ------------------------------------------------------------
     def fetch_web(self, investor):
         sys_prompt = (
-            "Return 2 short bullet points (<=10 words each) "
-            "describing this investor's focus, stage, or check size."
+            "Return 2 short bullet points (<=10 words each) describing this investor's focus."
         )
+
         try:
             return or_chat(
                 self.model,
@@ -138,20 +139,18 @@ class InvestorMatchingGraph:
 
         for c in state["candidates"]:
             inv = c["investor"]
+
             web = self.fetch_web(inv)
             dataset_context = self.data.investor_contexts[inv]
 
             system_msg = (
-                "You are a concise VC analyst. Write one paragraph (max 4 sentences) "
-                "explaining the investor–startup fit using evidence from the embedding score, "
-                "dataset context, and web summary."
+                "You are a concise VC analyst. Write one paragraph explaining the investor–startup fit."
             )
 
             user_msg = (
                 f"STARTUP:\nIndustry: {s['industry']}\nDeal Size: ${s['deal_size_m']}M\n"
                 f"Growth: {s['revenue_growth_yoy']}\nDescription: {s['description']}\n\n"
-                f"INVESTOR EMBEDDING SCORE: {c['embedding']}\n"
-                f"WEB SUMMARY:\n{web}\n\n"
+                f"SCORE: {c['embedding']}\nWEB SUMMARY:\n{web}\n\n"
                 f"DATASET CONTEXT:\n{dataset_context}"
             )
 
@@ -163,15 +162,15 @@ class InvestorMatchingGraph:
                         {"role": "user", "content": user_msg},
                     ],
                     self.key,
-                    max_tokens=220,
                 )
                 c["explanation"] = explanation.strip()
                 c["web"] = web
-                c["final"] = c["embedding"]
+
             except Exception as e:
                 c["explanation"] = f"(LLM error: {e})"
-                c["web"] = web
-                c["final"] = c["embedding"]
+                c["web"] = ""
+
+            c["final"] = c["embedding"]
 
         return state
 
@@ -182,6 +181,7 @@ class InvestorMatchingGraph:
 
     # ------------------------------------------------------------
     def run(self, startup, progress_callback, use_llm=True):
+
         state = GraphState(
             startup=startup,
             investors=list(self.data.investor_vectors.keys()),
@@ -196,7 +196,6 @@ class InvestorMatchingGraph:
             progress_callback("Analyzing fit…")
             state = self.reason(state)
         else:
-            # Skip LLM usage
             for c in state["candidates"]:
                 c["explanation"] = "(AI explanation disabled)"
                 c["web"] = ""
