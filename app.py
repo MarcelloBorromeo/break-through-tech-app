@@ -174,9 +174,11 @@ if st.button("Run Matching"):
             progress_callback=update_step,
         )
 
+        step_display.empty()
+
         done_msg = st.empty()
         done_msg.markdown(
-            "<div class='progress-line' style='color:green;'>✔ Done</div>",
+            "<div class='progress-line' style='color:green;'>Done!</div>",
             unsafe_allow_html=True,
         )
         time.sleep(2)
