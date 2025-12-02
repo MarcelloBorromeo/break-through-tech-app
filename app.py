@@ -3,12 +3,23 @@ import pandas as pd
 import time
 from engine import InvestorDataPipeline, InvestorMatchingGraph
 
-
 # -----------------------------------------------------------
-# IEC PREMIUM UI THEME — UPDATED VERSION
+# IEC PREMIUM UI THEME — UPDATED FONTS (Montserrat + Open Sans)
 # -----------------------------------------------------------
 st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800;900&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+
 <style>
+
+    /* GLOBAL FONT OVERRIDES */
+    html, body, div, span, textarea, input, button {
+        font-family: 'Open Sans', sans-serif !important;
+    }
+
+    /* Heading classes use Montserrat */
+    .main-title, .section-header, .investor-name, .stButton>button {
+        font-family: 'Montserrat', sans-serif !important;
+    }
 
     /* Global Background */
     body, .stApp {
@@ -37,6 +48,7 @@ st.markdown("""
         font-size: 20px;
         color: #167DFF;
         margin-bottom: 20px;
+        font-family: 'Open Sans', sans-serif !important;
     }
 
     /* Section Header */
@@ -89,7 +101,7 @@ st.markdown("""
         width: 100%;
         border: none;
         font-size: 18px;
-        font-weight: 600;
+        font-weight: 700 !important;
         transition: 0.2s;
     }
     .stButton>button:hover {
@@ -102,6 +114,7 @@ st.markdown("""
         font-size: 15px;
         margin-top: 5px;
         margin-bottom: 0px;
+        font-family: 'Open Sans', sans-serif !important;
     }
 
 </style>
@@ -135,17 +148,17 @@ with st.sidebar:
     st.header("Startup Profile")
     industry = st.text_input("Industry", "Software")
     deal = st.number_input(
-    "Deal Size ($M)",
-    value=50.0,
-    min_value=0.0,
-    max_value=1_000_000_000.0,
-)
+        "Deal Size ($M)",
+        value=50.0,
+        min_value=0.0,
+        max_value=1_000_000_000.0,
+    )
     growth = st.number_input(
-    "Growth YoY",
-    value=0.35,
-    min_value=0.0,
-    max_value=1.0,
-)
+        "Growth YoY",
+        value=0.35,
+        min_value=0.0,
+        max_value=1.0,
+    )
     desc = st.text_area("Description", "AI workflow automation platform.")
 
 
@@ -170,16 +183,14 @@ if st.button("Run Matching"):
             progress_callback=update_step
         )
 
-    # Left-justified Done message
     done_msg = st.empty()
     done_msg.markdown("<div class='progress-text' style='color:green;'>✔ Done</div>", unsafe_allow_html=True)
 
     time.sleep(2)
     done_msg.empty()
 
-
     # -----------------------------------------------------------
-    # Top 3 MATCHES TABLE — FINAL WORKING VERSION
+    # Top 3 MATCHES TABLE
     # -----------------------------------------------------------
     st.markdown("<div class='section-header'>Top 3 Matches</div>", unsafe_allow_html=True)
 
@@ -197,6 +208,7 @@ if st.button("Run Matching"):
     overflow: hidden;
     border: 1.5px solid #AFCBFF;
     box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+    font-family: 'Open Sans', sans-serif !important;
 }
 .match-table th {
     background-color: #167DFF;
@@ -205,6 +217,7 @@ if st.button("Run Matching"):
     font-weight: 700;
     padding: 14px;
     text-align: center;
+    font-family: 'Montserrat', sans-serif !important;
 }
 .match-table td {
     padding: 14px;
@@ -233,7 +246,6 @@ if st.button("Run Matching"):
     table_html += "</table>"
 
     st.markdown(table_html, unsafe_allow_html=True)
-
 
     # -----------------------------------------------------------
     # Reasoning Cards
