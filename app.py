@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+
 from engine import InvestorDataPipeline, InvestorMatchingGraph
 
 # -----------------------------------------------------------
@@ -36,7 +37,6 @@ body, .stApp {
     font-size: 46px !important;
     font-weight: 800 !important;
     color: #000000 !important;
-    letter-spacing: 0.2px;
     margin-bottom: 5px;
     opacity: 0.90;
 }
@@ -47,7 +47,6 @@ body, .stApp {
     font-size: 20px;
     color: #167DFF;
     margin-bottom: 20px;
-    font-family: 'Open Sans', sans-serif !important;
 }
 
 /* Section Header */
@@ -92,6 +91,7 @@ body, .stApp {
     margin-top: -4px;
 }
 
+/* Buttons */
 .stButton>button {
     background: #167DFF;
     color: white;
@@ -103,18 +103,32 @@ body, .stApp {
     font-weight: 700 !important;
     transition: 0.2s;
 }
-
 .stButton>button:hover {
     background: #0E3A75;
 }
 
-.progress-text {
-    text-align: left;
+/* Progress text */
+.progress-line {
+    display: flex;
+    align-items: center;
     color: #0E3A75;
     font-size: 15px;
-    margin-top: 5px;
-    margin-bottom: 0px;
-    font-family: 'Open Sans', sans-serif !important;
+    margin-top: 8px;
+}
+
+.loader {
+    border: 3px solid #d0e3ff;
+    border-top: 3px solid #167DFF;
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    animation: spin 1s linear infinite;
+    margin-right: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -169,7 +183,15 @@ if st.button("Run Matching"):
     step_display = st.empty()
 
     def update_step(text):
-        step_display.markdown(f"<div class='progress-text'>{text}</div>", unsafe_allow_html=True)
+        step_display.markdown(
+            f"""
+            <div class="progress-line">
+                <div class="loader"></div>
+                <span>{text}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     with st.spinner("Running investor matching pipeline…"):
         results = engine.run(
@@ -182,8 +204,12 @@ if st.button("Run Matching"):
             progress_callback=update_step
         )
 
+        # Success message
         done_msg = st.empty()
-        done_msg.markdown("<div class='progress-text' style='color:green;'>✔ Done</div>", unsafe_allow_html=True)
+        done_msg.markdown(
+            "<div class='progress-line' style='color:green;'>✔ Done</div>",
+            unsafe_allow_html=True
+        )
         time.sleep(2)
         done_msg.empty()
 
@@ -227,10 +253,10 @@ if st.button("Run Matching"):
     </style>
 
     <table class="match-table">
-    <tr>
-        <th>Investor</th>
-        <th>Match Score</th>
-    </tr>
+        <tr>
+            <th>Investor</th>
+            <th>Match Score</th>
+        </tr>
     """
 
     for _, row in df.iterrows():
